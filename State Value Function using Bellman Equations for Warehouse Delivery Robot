@@ -1,0 +1,51 @@
+import matplotlib.pyplot as plt
+
+# Grid size
+grid_size = 5
+
+# Initialize rewards
+rewards = [[-1 for _ in range(grid_size)] for _ in range(grid_size)]
+rewards[0][4] = 10
+rewards[4][4] = 10
+
+# Discount factor
+gamma = 0.9
+
+# Initialize value function
+V = [[0 for _ in range(grid_size)] for _ in range(grid_size)]
+
+# Actions: Up, Down, Left, Right
+actions = [(-1,0), (1,0), (0,-1), (0,1)]
+
+policy_prob = 0.25
+
+# Bellman Iteration
+for _ in range(100):
+    new_V = [[V[i][j] for j in range(grid_size)] for i in range(grid_size)]
+
+    for i in range(grid_size):
+        for j in range(grid_size):
+            value = 0
+            for a in actions:
+                ni = i + a[0]
+                nj = j + a[1]
+
+                if 0 <= ni < grid_size and 0 <= nj < grid_size:
+                    value += policy_prob * (rewards[ni][nj] + gamma * V[ni][nj])
+                else:
+                    value += policy_prob * (rewards[i][j] + gamma * V[i][j])
+
+            new_V[i][j] = round(value, 2)
+
+    V = new_V
+
+# Print output
+print("State Value Function:")
+for row in V:
+    print(row)
+
+# Plot (basic)
+plt.imshow(V)
+plt.colorbar(label="State Value")
+plt.title("State Value Function (Random Policy)")
+plt.show()
