@@ -1,0 +1,142 @@
+import numpy as np
+import random
+
+# ----------------------------
+# Tic Tac Toe Environment
+# ----------------------------
+class TicTacToe:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.board = [' '] * 9
+        return tuple(self.board)
+
+    def available_actions(self):
+        return [i for i in range(9) if self.board[i] == ' ']
+
+    def make_move(self, position, player):
+        self.board[position] = player
+
+    def check_winner(self, player):
+        win_positions = [(0,1,2),(3,4,5),(6,7,8),
+                         (0,3,6),(1,4,7),(2,5,8),
+                         (0,4,8),(2,4,6)]
+        for pos in win_positions:
+            if self.board[pos[0]] == self.board[pos[1]] == self.board[pos[2]] == player:
+                return True
+        return False
+
+    def is_draw(self):
+        return ' ' not in self.board
+
+# ----------------------------
+# SARSA Parameters
+# ----------------------------
+alpha = 0.1     # Learning rate
+gamma = 0.9     # Discount factor
+epsilon = 0.1   # Exploration rate
+episodes = 5000
+
+Q = {}  # Q-table
+
+# ----------------------------
+# Epsilon-Greedy Policy
+# ----------------------------
+def choose_action(state, actions):
+    if random.uniform(0,1) < epsilon:
+        return random.choice(actions)
+    else:
+        q_values = [Q.get((state,a), 0) for a in actions]
+        max_q = max(q_values)
+        return actions[q_values.index(max_q)]
+
+# ----------------------------
+# Training using SARSA
+# ----------------------------
+env = TicTacToe()
+
+for episode in range(episodes):
+    state = env.reset()
+    actions = env.available_actions()
+    action = choose_action(state, actions)
+
+    while True:
+        env.make_move(action, 'X')  # Agent move
+
+        # Check win
+        if env.check_winner('X'):
+            reward = 1
+            Q[(state,action)] = Q.get((state,action),0) + \
+                alpha*(reward - Q.get((state,action),0))
+            break
+
+        if env.is_draw():
+            reward = 0
+            break
+
+        # Opponent random move
+        opponent_action = random.choice(env.available_actions())
+        env.make_move(opponent_action, 'O')
+
+        if env.check_winner('O'):
+            reward = -1
+            Q[(state,action)] = Q.get((state,action),0) + \
+                alpha*(reward - Q.get((state,action),0))
+            break
+
+        next_state = tuple(env.board)
+        next_actions = env.available_actions()
+        next_action = choose_action(next_state, next_actions)
+
+        reward = 0
+
+        # SARSA Update
+        old_q = Q.get((state,action),0)
+        next_q = Q.get((next_state,next_action),0)
+
+        Q[(state,action)] = old_q + alpha*(reward + gamma*next_q - old_q)
+
+        state = next_state
+        action = next_action
+
+print("Training Completed!")
+
+# ----------------------------
+# Evaluation
+# ----------------------------
+wins = 0
+losses = 0
+draws = 0
+test_games = 1000
+
+for _ in range(test_games):
+    state = env.reset()
+
+    while True:
+        actions = env.available_actions()
+        q_values = [Q.get((tuple(env.board),a),0) for a in actions]
+        action = actions[q_values.index(max(q_values))]
+
+        env.make_move(action,'X')
+
+        if env.check_winner('X'):
+            wins += 1
+            break
+
+        if env.is_draw():
+            draws += 1
+            break
+
+        opponent_action = random.choice(env.available_actions())
+        env.make_move(opponent_action,'O')
+
+        if env.check_winner('O'):
+            losses += 1
+            break
+
+print("\nResults After Training:")
+print("Wins   :", wins)
+print("Draws  :", draws)
+print("Losses :", losses)
+print("Win Rate:", (wins/test_games)*100, "%")
