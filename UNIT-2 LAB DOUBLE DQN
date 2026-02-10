@@ -1,0 +1,139 @@
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import random
+from collections import deque
+import matplotlib.pyplot as plt
+
+# ----------------------------
+# Stock Trading Environment
+# ----------------------------
+class StockEnv:
+    def __init__(self, prices):
+        self.prices = prices
+        self.reset()
+
+    def reset(self):
+        self.t = 0
+        self.inventory = []
+        self.total_profit = 0
+        return np.array([self.prices[self.t]])
+
+    def step(self, action):
+        reward = 0
+        done = False
+        price = self.prices[self.t]
+
+        # 0 = Hold, 1 = Buy, 2 = Sell
+        if action == 1:  # Buy
+            self.inventory.append(price)
+
+        elif action == 2 and len(self.inventory) > 0:  # Sell
+            bought_price = self.inventory.pop(0)
+            reward = price - bought_price
+            self.total_profit += reward
+
+        self.t += 1
+        if self.t >= len(self.prices) - 1:
+            done = True
+
+        next_state = np.array([self.prices[self.t]])
+        return next_state, reward, done
+
+# ----------------------------
+# Neural Network
+# ----------------------------
+class DQN(nn.Module):
+    def __init__(self, state_size, action_size):
+        super(DQN, self).__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(state_size, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, action_size)
+        )
+
+    def forward(self, x):
+        return self.fc(x)
+
+# ----------------------------
+# Hyperparameters
+# ----------------------------
+state_size = 1
+action_size = 3
+gamma = 0.95
+epsilon = 1.0
+epsilon_min = 0.01
+epsilon_decay = 0.995
+batch_size = 32
+memory = deque(maxlen=2000)
+
+# ----------------------------
+# Initialize Networks
+# ----------------------------
+policy_net = DQN(state_size, action_size)
+target_net = DQN(state_size, action_size)
+target_net.load_state_dict(policy_net.state_dict())
+target_net.eval()
+
+optimizer = optim.Adam(policy_net.parameters(), lr=0.001)
+loss_fn = nn.MSELoss()
+
+# ----------------------------
+# Sample Stock Prices
+# ----------------------------
+prices = np.sin(np.linspace(0, 20, 200)) * 10 + 50
+env = StockEnv(prices)
+
+# ----------------------------
+# Training Loop
+# ----------------------------
+episodes = 10
+
+for e in range(episodes):
+    state = env.reset()
+    state = torch.FloatTensor(state).unsqueeze(0)
+
+    for time in range(len(prices)-1):
+        if random.random() < epsilon:
+            action = random.randrange(action_size)
+        else:
+            with torch.no_grad():
+                action = torch.argmax(policy_net(state)).item()
+
+        next_state, reward, done = env.step(action)
+        next_state = torch.FloatTensor(next_state).unsqueeze(0)
+
+        memory.append((state, action, reward, next_state, done))
+        state = next_state
+
+        if len(memory) > batch_size:
+            minibatch = random.sample(memory, batch_size)
+
+            for s, a, r, ns, d in minibatch:
+                target = r
+                if not d:
+                    # Double DQN Logic
+                    best_action = torch.argmax(policy_net(ns)).item()
+                    target = r + gamma * target_net(ns)[0][best_action].item()
+
+                target_f = policy_net(s)
+                target_f[0][a] = target
+
+                loss = loss_fn(policy_net(s), target_f.detach())
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        if done:
+            break
+
+    epsilon = max(epsilon_min, epsilon * epsilon_decay)
+    target_net.load_state_dict(policy_net.state_dict())
+
+    print(f"Episode {e+1}/{episodes}, Profit: {env.total_profit:.2f}")
+
+print("Training Completed")V
